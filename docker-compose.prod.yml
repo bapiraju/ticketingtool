@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ticketingtool-prod
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=INFO
+      - HOST=0.0.0.0
+      - PORT=8000
+    volumes:
+      - ticketingtool_logs:/app/logs
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # Optional: Add a PostgreSQL database for production
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: ticketingtool-db-prod
+  #   environment:
+  #     POSTGRES_DB: ticketingtool
+  #     POSTGRES_USER: ${DB_USER}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data_prod:/var/lib/postgresql/data
+  #   restart: always
+
+volumes:
+  ticketingtool_logs:
+  # postgres_data_prod:
