@@ -8,4 +8,8 @@ dependencies = [
     "fastapi[standard]>=0.122.0",
     "loguru>=0.7.3",
     "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=0.2.0",
+    "pyjwt>=2.10.1",
+    "sqlmodel>=0.0.8",
 ]

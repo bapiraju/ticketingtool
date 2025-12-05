@@ -12,13 +12,13 @@ import logging
 import sys
 from pathlib import Path
 from loguru import logger
-from app.core.config import LogConfig
+from app.core.config import settings
 
 # Remove default handler
 logger.remove()
 
 # Ensure logs directory exists
-log_dir = Path(LogConfig.FILE_PATH).parent
+log_dir = Path(settings.log_file_path).parent
 log_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -55,6 +55,19 @@ class InterceptHandler(logging.Handler):
         )
 
 
+def _configure_library_loggers() -> None:
+    """Configure and propagate logs from third-party libraries to root logger."""
+    libraries = [
+        "uvicorn", "uvicorn.access", "uvicorn.error",
+        "fastapi", "asyncio", "starlette", "starlette.middleware.base", "starlette.requests",
+    ]
+    for logger_name in libraries:
+        lib_logger = logging.getLogger(logger_name)
+        lib_logger.handlers = []  # Remove any existing handlers
+        lib_logger.propagate = True  # Ensure logs propagate to root
+        lib_logger.setLevel(logging.DEBUG)  # Capture all levels
+
+
 def setup_logging(level: str = None) -> None:
     """
     Configure centralized logging for the entire application.
@@ -75,11 +88,18 @@ def setup_logging(level: str = None) -> None:
         setup_logging(level="DEBUG")  # Override with DEBUG
     """
     
+    # Remove existing handlers to avoid duplicates when reconfiguring
+    try:
+        logger.remove()
+    except Exception:
+        pass
+
     # Use provided level or get from config
     if level is None:
-        level = LogConfig.LEVEL
+        level = settings.log_level.value if hasattr(settings.log_level, "value") else str(settings.log_level)
     else:
-        level = LogConfig.validate_level(level)
+        # normalize
+        level = str(level).upper()
     
     # Add console output with nice formatting
     logger.add(
@@ -90,16 +110,37 @@ def setup_logging(level: str = None) -> None:
     )
     
     # Add file output with rotation
-    logger.add(
-        LogConfig.FILE_PATH,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        rotation=LogConfig.FILE_ROTATION,
-        compression=LogConfig.FILE_COMPRESSION,
-        retention=LogConfig.FILE_RETENTION,
-        level=level,
-        backtrace=True,
-        diagnose=True,
-    )
+    # Only add file logging in non-reload mode. When Uvicorn runs with
+    # the auto-reloader it writes files which can trigger the reloader
+    # itself. To avoid reload loops during development, skip file logging
+    # while `settings.reload` is True.
+    try:
+        if not getattr(settings, "reload", False):
+            logger.add(
+                settings.log_file_path,
+                format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+                rotation=settings.log_file_rotation,
+                compression=settings.log_file_compression,
+                retention=settings.log_file_retention,
+                level=level,
+                backtrace=True,
+                diagnose=True,
+            )
+        else:
+            logger.debug("Reload mode enabled — skipping file logging to avoid reloader loops")
+    except Exception:
+        # If settings isn't available or an error occurs, fall back to adding file
+        # logging to avoid losing logs in production scenarios.
+        logger.add(
+            settings.log_file_path,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+            rotation=settings.log_file_rotation,
+            compression=settings.log_file_compression,
+            retention=settings.log_file_retention,
+            level=level,
+            backtrace=True,
+            diagnose=True,
+        )
     
     # Intercept standard library logging
     # This captures logs from uvicorn, fastapi, asyncio, starlette, etc.
@@ -108,24 +149,8 @@ def setup_logging(level: str = None) -> None:
         level=logging.DEBUG,  # Capture all levels at root
     )
     
-    # Configure specific library loggers to propagate to root
-    libraries_to_configure = [
-        "uvicorn",
-        "uvicorn.access",
-        "uvicorn.error",
-        "fastapi",
-        "asyncio",
-        "starlette",
-        "starlette.middleware.base",
-        "starlette.requests",
-    ]
-    
-    for logger_name in libraries_to_configure:
-        lib_logger = logging.getLogger(logger_name)
-        lib_logger.handlers = []  # Remove any existing handlers
-        lib_logger.propagate = True  # Ensure logs propagate to root
-        lib_logger.setLevel(logging.DEBUG)  # Capture all levels
+    _configure_library_loggers()
     
     logger.info(f"Logging system initialized with level: {level}")
-    logger.debug(f"Log file: {LogConfig.FILE_PATH}")
-    logger.debug(f"File rotation: {LogConfig.FILE_ROTATION}")
+    logger.debug(f"Log file: {settings.log_file_path}")
+    logger.debug(f"File rotation: {settings.log_file_rotation}")

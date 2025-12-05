@@ -6,7 +6,7 @@ access point for registering routes with the FastAPI app.
 """
 
 from fastapi import APIRouter
-from app.api.routes import health, items
+from app.api.routes import health, items, admin
 
 # Create a combined router for all API routes
 api_router = APIRouter()
@@ -14,5 +14,6 @@ api_router = APIRouter()
 # Include all route modules
 api_router.include_router(health.router)
 api_router.include_router(items.router)
+api_router.include_router(admin.router)
 
 __all__ = ["api_router"]
